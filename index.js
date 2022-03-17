@@ -169,8 +169,8 @@ const calculateEnergyUsageForDay = ({ initial, events }, day) => {
   const startIndex = events.findIndex(({ timestamp }) => timestamp > startTime);
 
   if (startIndex < 0) {
-    // startTime is greater than all events and therefore we return a day of energy use
-    return MAX_IN_PERIOD;
+    // we should check last state and return day of energy use if on or 0 if off
+    return events[events.length-1].state === 'on' ? MAX_IN_PERIOD : 0;
   }
   // if startTime is greater than last event timestamp then we use the last event state as initial state.
   let updatedInitial;

@@ -267,4 +267,17 @@ describe('calculateEnergyUsageForDay', () => {
   it('should throw an error on a non-integer day string', () => {
     expect(() => calculateEnergyUsageForDay('3')).toThrow(/must be an integer/);
   });
+
+  it('should return no energy used for a day that has no state and previous state was off', () => {
+    const data = {
+      initial : 'off', 
+      events : [
+        {
+          timestamp : 1400,
+          state : 'off',
+        }
+      ]
+    }
+    expect(calculateEnergyUsageForDay(data, 2)).toBe(0);
+  })
 });
