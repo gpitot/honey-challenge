@@ -2,6 +2,42 @@
 
 const MAX_IN_PERIOD = 1440;
 
+const calculateEnergy = (
+  { initial, events },
+  { lastStateCondition, currentStateCondition, irrelevantState }
+) => {
+  if (initial !== 'on' && initial !== 'off' && initial !== 'auto-off') {
+    throw 'initial must be on or off or auto-off';
+  }
+
+  let lastState = initial;
+  let lastTimestamp = 0;
+  let energy = 0;
+
+  events.forEach(({ state, timestamp }) => {
+    if (lastTimestamp > timestamp) {
+      throw 'events must be in timestamped order';
+    }
+
+    if (lastState === lastStateCondition && state === currentStateCondition) {
+      energy += timestamp - lastTimestamp;
+    }
+
+    if (lastState === currentStateCondition) {
+      lastTimestamp = timestamp;
+    }
+    if (state !== irrelevantState) {
+      lastState = state;
+    }
+  });
+
+  // if state is on in the last event, then we should add the minutes to the end of the day in too
+  if (lastState === lastStateCondition) {
+    energy += MAX_IN_PERIOD - lastTimestamp;
+  }
+  return Math.min(energy, MAX_IN_PERIOD);
+};
+
 /**
  * PART 1
  *
@@ -36,7 +72,12 @@ const MAX_IN_PERIOD = 1440;
  * ```
  */
 
-const calculateEnergyUsageSimple = (profile) => {}
+const calculateEnergyUsageSimple = ({ initial, events }) => {
+  return calculateEnergy(
+    { initial, events },
+    { lastStateCondition: 'on', currentStateCondition: 'off' }
+  );
+};
 
 /**
  * PART 2
@@ -70,7 +111,16 @@ const calculateEnergyUsageSimple = (profile) => {}
  * and not manual intervention.
  */
 
-const calculateEnergySavings = (profile) => {};
+const calculateEnergySavings = ({ initial, events }) => {
+  return calculateEnergy(
+    { initial, events },
+    {
+      lastStateCondition: 'auto-off',
+      currentStateCondition: 'on',
+      irrelevantState: 'off',
+    }
+  );
+};
 
 /**
  * PART 3
@@ -100,7 +150,69 @@ const calculateEnergySavings = (profile) => {};
 
 const isInteger = (number) => Number.isInteger(number);
 
-const calculateEnergyUsageForDay = (monthUsageProfile, day) => {};
+const calculateEnergyUsageForDay = ({ initial, events }, day) => {
+  if (!isInteger(day)) {
+    throw 'must be an integer';
+  }
+  if (day <= 0 || day > 365) {
+    throw 'day out of range';
+  }
+
+  if (events.length === 0) {
+    return calculateEnergyUsageSimple({ initial, events });
+  }
+
+  const endTime = day * MAX_IN_PERIOD;
+  const startTime = endTime - MAX_IN_PERIOD;
+
+  // we need to set the initial by using the state before our day starts
+  const startIndex = events.findIndex(({ timestamp }) => timestamp > startTime);
+
+  if (startIndex < 0) {
+    // startTime is greater than all events and therefore we return a day of energy use
+    return MAX_IN_PERIOD;
+  }
+  // if startTime is greater than last event timestamp then we use the last event state as initial state.
+  let updatedInitial;
+  if (startIndex === 0) {
+    updatedInitial = initial;
+  } else {
+    updatedInitial =
+      startIndex >= 1
+        ? events[startIndex - 1].state
+        : events[events.length - 1].state;
+  }
+
+  // we need to get the event that goes past >= our end time and modify the timestamp to midnight
+  let endIndex = events.findIndex(({ timestamp }) => timestamp >= endTime);
+  if (endIndex === -1) {
+    endIndex = events.length - 1;
+  }
+
+  // normalize our day to 'day timestamps' for ease of calculations
+  const dayEvents = events.slice(startIndex, endIndex + 1).map((day) => ({
+    ...day,
+    timestamp: day.timestamp - startTime,
+  }));
+
+  // make sure the last event is capped at midnight, if the last event is the last event in the month then we can add an 'off' event at midnight
+  if (dayEvents[dayEvents.length - 1].timestamp > MAX_IN_PERIOD) {
+    dayEvents[dayEvents.length - 1] = {
+      ...dayEvents[dayEvents.length - 1],
+      timestamp: MAX_IN_PERIOD,
+    };
+  } else {
+    dayEvents.push({
+      state: 'off',
+      timestamp: MAX_IN_PERIOD,
+    });
+  }
+
+  return calculateEnergyUsageSimple({
+    initial: updatedInitial,
+    events: dayEvents,
+  });
+};
 
 module.exports = {
   calculateEnergyUsageSimple,

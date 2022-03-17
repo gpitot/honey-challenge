@@ -72,6 +72,16 @@ describe('calculateEnergyUsageSimple', () => {
       80 - 0 + (1440 - 656)
     );
   });
+
+  it('should throw an error on initial being an invalid value', () => {
+    const usageProfile = {
+      initial: null,
+      events: [],
+    };
+    expect(() => calculateEnergyUsageSimple(usageProfile)).toThrow(
+      /initial must be on or off/
+    );
+  });
 });
 
 // Part 2
@@ -152,6 +162,16 @@ describe('calculateEnergySavings', () => {
       ],
     };
     expect(calculateEnergySavings(usageProfile)).toEqual(MAX_IN_PERIOD - 320);
+  });
+
+  it('should throw an error on initial being an invalid value', () => {
+    const usageProfile = {
+      initial: null,
+      events: [],
+    };
+    expect(() => calculateEnergyUsageSimple(usageProfile)).toThrow(
+      /initial must be on or off/
+    );
   });
 });
 
@@ -242,5 +262,9 @@ describe('calculateEnergyUsageForDay', () => {
     expect(() => calculateEnergyUsageForDay(3.76)).toThrow(
       /must be an integer/
     );
+  });
+
+  it('should throw an error on a non-integer day string', () => {
+    expect(() => calculateEnergyUsageForDay('3')).toThrow(/must be an integer/);
   });
 });
