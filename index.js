@@ -6,17 +6,13 @@ const calculateEnergy = (
   { initial, events },
   { lastStateCondition, currentStateCondition, irrelevantState }
 ) => {
-  if (initial !== 'on' && initial !== 'off' && initial !== 'auto-off') {
-    throw 'initial must be on or off or auto-off';
-  }
-
   let lastState = initial;
   let lastTimestamp = 0;
   let energy = 0;
 
   events.forEach(({ state, timestamp }) => {
     if (lastTimestamp > timestamp) {
-      throw 'events must be in timestamped order';
+      throw new Error('events must be in timestamped order');
     }
 
     if (lastState === lastStateCondition && state === currentStateCondition) {
@@ -35,7 +31,7 @@ const calculateEnergy = (
   if (lastState === lastStateCondition) {
     energy += MAX_IN_PERIOD - lastTimestamp;
   }
-  return Math.min(energy, MAX_IN_PERIOD);
+  return energy;
 };
 
 /**
@@ -73,6 +69,14 @@ const calculateEnergy = (
  */
 
 const calculateEnergyUsageSimple = ({ initial, events }) => {
+  if (initial !== 'on' && initial !== 'off') {
+    throw new Error('initial must be on or off');
+  }
+
+  if (events.length === 0) {
+    return initial === 'on' ? MAX_IN_PERIOD : 0;
+  }
+
   return calculateEnergy(
     { initial, events },
     { lastStateCondition: 'on', currentStateCondition: 'off' }
@@ -112,6 +116,14 @@ const calculateEnergyUsageSimple = ({ initial, events }) => {
  */
 
 const calculateEnergySavings = ({ initial, events }) => {
+  if (initial !== 'on' && initial !== 'off' && initial !== 'auto-off') {
+    throw new Error('initial must be on or off or auto-off');
+  }
+
+  if (events.length === 0) {
+    return initial === 'on' || initial === 'off' ? 0 : MAX_IN_PERIOD;
+  }
+
   return calculateEnergy(
     { initial, events },
     {
@@ -152,65 +164,43 @@ const isInteger = (number) => Number.isInteger(number);
 
 const calculateEnergyUsageForDay = ({ initial, events }, day) => {
   if (!isInteger(day)) {
-    throw 'must be an integer';
+    throw new Error('must be an integer');
   }
   if (day <= 0 || day > 365) {
-    throw 'day out of range';
+    throw new Error('day out of range');
   }
 
   if (events.length === 0) {
     return calculateEnergyUsageSimple({ initial, events });
   }
 
-  const endTime = day * MAX_IN_PERIOD;
-  const startTime = endTime - MAX_IN_PERIOD;
+  const startTime = (day - 1) * MAX_IN_PERIOD;
+  const endTime = startTime + MAX_IN_PERIOD;
 
-  // we need to set the initial by using the state before our day starts
-  const startIndex = events.findIndex(({ timestamp }) => timestamp > startTime);
-
+  const startIndex = events.findIndex(
+    ({ timestamp }) => timestamp >= startTime
+  );
   if (startIndex < 0) {
-    // we should check last state and return day of energy use if on or 0 if off
-    return events[events.length-1].state === 'on' ? MAX_IN_PERIOD : 0;
-  }
-  // if startTime is greater than last event timestamp then we use the last event state as initial state.
-  let updatedInitial;
-  if (startIndex === 0) {
-    updatedInitial = initial;
-  } else {
-    updatedInitial =
-      startIndex >= 1
-        ? events[startIndex - 1].state
-        : events[events.length - 1].state;
+    // start time is after all events
+    // get last state and return either full day of energy or 0 energy
+    return events[events.length - 1].state === 'on' ? MAX_IN_PERIOD : 0;
   }
 
-  // we need to get the event that goes past >= our end time and modify the timestamp to midnight
-  let endIndex = events.findIndex(({ timestamp }) => timestamp >= endTime);
-  if (endIndex === -1) {
-    endIndex = events.length - 1;
-  }
-
-  // normalize our day to 'day timestamps' for ease of calculations
-  const dayEvents = events.slice(startIndex, endIndex + 1).map((day) => ({
-    ...day,
-    timestamp: day.timestamp - startTime,
+  const matchingEvents = [
+    ...events.filter(
+      ({ timestamp }) => timestamp >= startTime && timestamp <= endTime
+    ),
+  ].map((event) => ({
+    ...event,
+    timestamp: event.timestamp - startTime,
   }));
 
-  // make sure the last event is capped at midnight, if the last event is the last event in the month then we can add an 'off' event at midnight
-  if (dayEvents[dayEvents.length - 1].timestamp > MAX_IN_PERIOD) {
-    dayEvents[dayEvents.length - 1] = {
-      ...dayEvents[dayEvents.length - 1],
-      timestamp: MAX_IN_PERIOD,
-    };
-  } else {
-    dayEvents.push({
-      state: 'off',
-      timestamp: MAX_IN_PERIOD,
-    });
-  }
+  const updatedInitialState =
+    startIndex === 0 ? initial : events[startIndex - 1].state;
 
   return calculateEnergyUsageSimple({
-    initial: updatedInitial,
-    events: dayEvents,
+    initial: updatedInitialState,
+    events: matchingEvents,
   });
 };
 
